@@ -1,0 +1,76 @@
+name: Build Docker Image with Native Commands
+
+on:
+  push:
+    branches:
+      - main
+    # paths-ignore:
+      # - '.github/workflows/**'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/angular-docker-app
+  TAG: latest
+
+jobs:
+  build:
+    name: Build and Push Image
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+        
+      - name: Build Docker Image
+        run: |
+          docker build -t $REGISTRY/$IMAGE_NAME:$TAG .
+          docker images
+
+      - name: Push Docker Image
+        run: |
+          docker push $REGISTRY/$IMAGE_NAME:$TAG
+
+  deploy:
+    name: Deploy to EC2
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > key.pem
+          chmod 600 key.pem
+          
+
+      - name: Deploy Application
+        run: |
+          ssh -i key.pem -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << EOF
+
+            # Login to GHCR
+            echo "${{ secrets.GHCR_PAT }}" | sudo docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+            
+            #CleanDocker
+            sudo docker system prune -af
+            sudo docker volume prune -f
+          
+            # Pull latest image
+            sudo docker pull $REGISTRY/$IMAGE_NAME:$TAG
+
+            # Stop and remove old container
+            sudo docker stop angular-docker-app || true
+            sudo docker rm angular-docker-app || true
+
+            # Run new container
+            sudo docker run -d --name angular-docker-app -p 80:80 $REGISTRY/$IMAGE_NAME:$TAG
+
+            
+          EOF
