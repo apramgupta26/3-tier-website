@@ -89,7 +89,7 @@ jobs:
             sudo docker stop mysql-db springboot-backend angular-frontend || true
             sudo docker rm mysql-db springboot-backend angular-frontend || true
 
-            sudo docker run -d --name mysql-db --network app-network \
+            sudo docker run --name mysql-db --network app-network \
               -e MYSQL_ROOT_PASSWORD=${{ secrets.DB_ROOT_PASSWORD }} \
               -e MYSQL_DATABASE=appdb \
               -e MYSQL_USER=${{ secrets.DB_USER }} \
